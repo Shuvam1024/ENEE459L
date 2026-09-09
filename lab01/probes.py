@@ -1,8 +1,5 @@
 """Probes — read what the machine says about itself.
 
-INSTRUCTOR SOLUTION. Do not distribute. The student copy of this file has the
-body of every function below replaced by `raise NotImplementedError`.
-
 Every probe takes a `root` argument and reads nothing outside it. That is not
 decoration: it is what makes this lab gradeable without twenty boards on a
 desk, and it is the reason the test suite can present a fake SD-booted machine
@@ -223,7 +220,6 @@ def probe_root_source(root: Path = Path("/")) -> dict[str, Any]:
         if device.startswith("/dev/nvme"):
             kind = "nvme"
         elif device.startswith("/dev/mmcblk") or device.startswith("/dev/sd"):
-            # Slides call this "ssd"; the starter comments also accept mmc/SD here.
             kind = "ssd"
         else:
             kind = "other"
