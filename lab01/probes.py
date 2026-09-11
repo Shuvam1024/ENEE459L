@@ -1,5 +1,8 @@
 """Probes — read what the machine says about itself.
 
+INSTRUCTOR SOLUTION. Do not distribute. The student copy of this file has the
+body of every function below replaced by `raise NotImplementedError`.
+
 Every probe takes a `root` argument and reads nothing outside it. That is not
 decoration: it is what makes this lab gradeable without twenty boards on a
 desk, and it is the reason the test suite can present a fake SD-booted machine
