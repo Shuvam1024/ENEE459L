@@ -241,8 +241,12 @@ def probe_telemetry(bench: Bench) -> dict[str, Any]:
         for zone_dir in sorted(thermal_root.glob("thermal_zone*")):
             if not zone_dir.is_dir():
                 continue
-            rel = zone_dir.relative_to(Path(bench.telemetry))
-            raw = read_text(bench.telemetry, str(rel / "temp"))
+            try:
+                rel = zone_dir.relative_to(Path(bench.telemetry))
+                raw = read_text(bench.telemetry, str(rel / "temp"))
+                ztype = read_text(bench.telemetry, str(rel / "type"))
+            except (OSError, UnicodeDecodeError, TypeError, ValueError):
+                continue
             if raw is None:
                 continue
             try:
@@ -251,8 +255,7 @@ def probe_telemetry(bench: Bench) -> dict[str, Any]:
                 continue
             if milli <= -1000:
                 continue
-            ztype = read_text(bench.telemetry, str(rel / "type")) or zone_dir.name
-            zones.append((ztype, milli / 1000.0))
+            zones.append((ztype or zone_dir.name, milli / 1000.0))
     if not zones:
         temperature: dict[str, Any] = unknown(temp_src, "no readable thermal zones")
     else:
