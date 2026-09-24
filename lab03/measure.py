@@ -175,6 +175,44 @@ def is_multimodal(samples: list[float]) -> dict[str, Any]:
         ],
     )
 
+
+def is_stationary(samples: list[float]) -> dict[str, Any]:
+    """True when the last third has not drifted more than 10% from the first."""
+    src = (
+        "last-third median vs first-third median, relative to the run median, "
+        f"tolerance {STATIONARITY_TOL}"
+    )
+    n = len(samples)
+    if n < MIN_SAMPLES_FOR_STATIONARITY:
+        return unknown(src, "too few samples to divide into thirds")
+
+    overall = statistics.median(samples)
+    if overall <= 0:
+        return unknown(src, "median is not positive")
+
+    k = n // 3
+    first = statistics.median(samples[:k])
+    last = statistics.median(samples[-k:])
+    drift = last - first
+    relative = abs(drift) / overall
+    if drift > 0:
+        direction = "slower"
+    elif drift < 0:
+        direction = "faster"
+    else:
+        direction = "flat"
+
+    return measured(
+        relative <= STATIONARITY_TOL,
+        src,
+        first_third_median_ms=round(first, 4),
+        last_third_median_ms=round(last, 4),
+        drift_ms=round(drift, 4),
+        drift_relative=round(relative, 4),
+        direction=direction,
+        tolerance=STATIONARITY_TOL,
+    )
+
 # ===========================================================================
 # 7. The clock ceiling the run happened under
 # ===========================================================================
@@ -316,6 +354,7 @@ if __name__ == "__main__":
         "warmup_boundary": find_warmup_boundary(samples),
         "summarize_setup": summarize(samples),
         "is_multimodal": is_multimodal(samples),
+        "is_stationary": is_stationary(samples),
         "probe_power_state": probe_power_state(env),
         "probe_telemetry": probe_telemetry(env),
     }
