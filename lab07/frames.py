@@ -209,7 +209,6 @@ def main(
     image_filename: str = "captured_frame.jpg",
     json_filename: str = "frame_report.json",
     target_fps: float = 30.0,
-    source_image: str | None = "sample_frame.png",
 ) -> None:
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -217,14 +216,9 @@ def main(
     img_path = out_path / image_filename
     json_path = out_path / json_filename
 
-    # 1. Read the frame from a file, or capture one from the camera
-    if source_image is not None:
-        frame_bgr = cv2.imread(source_image, cv2.IMREAD_COLOR)
-        if frame_bgr is None:
-            raise FrameError(f"could not read the sample image {source_image!r}")
-    else:
-        pipeline_str = gstreamer_pipeline()
-        frame_bgr = grab_frame(pipeline_str)
+    # 1. Capture frame from hardware
+    pipeline_str = gstreamer_pipeline()
+    frame_bgr = grab_frame(pipeline_str)
 
     # 2. Save captured image to disk
     cv2.imwrite(str(img_path), frame_bgr)
