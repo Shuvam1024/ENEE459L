@@ -5,6 +5,7 @@ from typing import Any, Iterable, Sequence
 from schema import BLACK_MAX, FLAT_SPREAD
 
 import cv2
+import math
 import time
 import json
 import numpy as np
@@ -113,38 +114,91 @@ def grab_frame(pipeline: str, warmup_frames: int = 15) -> np.ndarray:
 ## Your work starts here ###
 ############################
 
+DARK_MEAN = 0.10
+
+
 def frame_bytes(width: int, height: int, fmt: str) -> int:
-    pass
+    for name, v in (("width", width), ("height", height)):
+        if isinstance(v, bool) or not isinstance(v, (int, np.integer)) or v <= 0:
+            raise FrameError(f"{name} must be a positive integer, got {v!r}")
+    bpp = _bytes_per_pixel(str(fmt).lower())
+    return int(math.ceil(int(width) * int(height) * bpp))
 
 
 def bytes_per_second(width: int, height: int, fmt: str, fps: float) -> float:
-    pass
+    if fps <= 0:
+        raise FrameError(f"fps must be positive, got {fps!r}")
+    return float(frame_bytes(width, height, fmt) * fps)
 
 
 def frame_stats(pixels: Sequence[float] | Iterable[float]) -> dict[str, float]:
-    pass
+    values = [float(v) for v in pixels]
+    if not values:
+        raise FrameError("no pixel values: a failed read is not a black frame")
+    vmin = min(values)
+    vmax = max(values)
+    n = len(values)
+    mean = sum(values) / n
+    var = sum((v - mean) ** 2 for v in values) / n
+    return {
+        "min": vmin,
+        "max": vmax,
+        "mean": mean,
+        "spread": vmax - vmin,
+        "sd": math.sqrt(var),
+        "samples": float(n),
+    }
 
 
 def classify(stats: dict[str, float]) -> tuple[str, str]:
-    pass
+    missing = [k for k in ("max", "spread", "mean") if k not in stats]
+    if missing:
+        raise FrameError(f"stats is missing {missing}")
+    vmax, spread, mean = stats["max"], stats["spread"], stats["mean"]
+    if vmax <= BLACK_MAX:
+        return "black", f"max {vmax:.4f} <= {BLACK_MAX:.4f}. No light reached the sensor."
+    if spread < FLAT_SPREAD:
+        return "flat", f"spread {spread:.4f} < {FLAT_SPREAD}. No structure across the frame."
+    if mean < DARK_MEAN:
+        return "dark", f"mean {mean:.4f} < {DARK_MEAN}. Structured but underexposed."
+    return "scene", f"mean {mean:.4f}, spread {spread:.4f}. Exposed and structured."
 
 
 def conversion_bytes(width: int, height: int, src: str, dst: str) -> int:
-    pass
+    if str(src).lower() == str(dst).lower():
+        return 0
+    return frame_bytes(width, height, src) + frame_bytes(width, height, dst)
 
 
 def resize_bytes(src_w: int, src_h: int, dst_w: int, dst_h: int,
                  fmt: str) -> int:
-    pass
+    return frame_bytes(src_w, src_h, fmt) + frame_bytes(dst_w, dst_h, fmt)
 
 
 def normalise_bytes(width: int, height: int, channels: int = 3,
                     out_bytes: int = 4) -> int:
-    pass
+    if width <= 0 or height <= 0 or channels <= 0:
+        raise FrameError(
+            f"width, height and channels must be positive, got "
+            f"{width}, {height}, {channels}"
+        )
+    p = int(width) * int(height) * int(channels)
+    return p * 1 + p * int(out_bytes)
 
 
 def summarise_formats(width: int, height: int) -> list[dict[str, Any]]:
-    pass
+    base = frame_bytes(width, height, "rgb")
+    rows: list[dict[str, Any]] = []
+    for fmt in FORMATS:
+        n = frame_bytes(width, height, fmt)
+        rows.append({
+            "format": fmt,
+            "bytes_per_pixel": _bytes_per_pixel(fmt),
+            "bytes": n,
+            "relative_to_rgb": n / base,
+            "note": FORMAT_NOTES[fmt],
+        })
+    return rows
 
 
 ###############################
@@ -155,6 +209,7 @@ def main(
     image_filename: str = "captured_frame.jpg",
     json_filename: str = "frame_report.json",
     target_fps: float = 30.0,
+    source_image: str | None = "sample_frame.png",
 ) -> None:
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -162,9 +217,14 @@ def main(
     img_path = out_path / image_filename
     json_path = out_path / json_filename
 
-    # 1. Capture frame from hardware
-    pipeline_str = gstreamer_pipeline()
-    frame_bgr = grab_frame(pipeline_str)
+    # 1. Read the frame from a file, or capture one from the camera
+    if source_image is not None:
+        frame_bgr = cv2.imread(source_image, cv2.IMREAD_COLOR)
+        if frame_bgr is None:
+            raise FrameError(f"could not read the sample image {source_image!r}")
+    else:
+        pipeline_str = gstreamer_pipeline()
+        frame_bgr = grab_frame(pipeline_str)
 
     # 2. Save captured image to disk
     cv2.imwrite(str(img_path), frame_bgr)
